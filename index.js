@@ -40,7 +40,11 @@ async function run() {
       res.send(result)
     })
 
-  
+    // Top 6 Foods by purchaseCount
+    app.get('/top-six-food', async(req,res)=>{
+      const result = await Foods.find().sort({ purchaseCount: -1 }).limit(6).toArray();
+      res.send(result);
+    })
     
 
 		// Send a ping to confirm a successful connection
