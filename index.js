@@ -30,10 +30,17 @@ const client = new MongoClient(uri, {
 async function run() {
   try {
     await client.connect();
-     const collection =client.db("DB_NAME").collection("COLLECTION_NAME");
+     const Foods =client.db("FoodHiveDB").collection("Foods");
 
     // All CRUD operations here...
-    
+
+    // All Foods
+    app.get('/all-foods',async(req,res)=>{
+      const result = await Foods.find().toArray();
+      res.send(result)
+    })
+
+  
     
 
 		// Send a ping to confirm a successful connection
