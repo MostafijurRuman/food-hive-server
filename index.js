@@ -40,22 +40,119 @@ async function run() {
       res.send(result)
     })
 
+    
+    // Search & Pagination  both api
+    /// GET /foods?search=burger&page=2&limit=9
+   app.get('/foods', async (req, res) => {
+  try {
+    const search = req.query.search || "";
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 9;
+    const skip = (page - 1) * limit;
+
+    // Filter condition
+    const filter = search.trim()
+      ? { name: { $regex: search, $options: "i" } }  // case-insensitive search
+      : {};
+
+    // Get total count for pagination
+    const total = await Foods.countDocuments(filter);
+
+    // Fetch data with search + pagination
+    const filteredFood = await Foods.find(filter)
+      .sort({ purchaseCount: -1 }) // sort by purchaseCount (same as your old pagination)
+      .skip(skip)
+      .limit(limit)
+      .toArray();
+
+    res.send({
+      total,   // total matching foods 
+      filteredFood // data for search & pagination  done 
+    });
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Server Error" });
+  }
+});
+
+// Api for store user uid , phone , address
+const FoodHiveUsers = client.db("FoodHiveDB").collection("FoodHiveUsers"); //New collection for user info save
+
+// Updated GET endpoint for user uid
+app.get('/users/:uid', async (req, res) => {
+  try {
+    const { uid } = req.params;
+    
+    if (!uid) {
+      return res.status(400).json({ message: "uid is required" });
+    }
+
+    const user = await FoodHiveUsers.findOne({ uid });
+    
+    if (user) {
+      res.json(user); // Changed from res.send() to res.json()
+    } else {
+      res.status(404).json({ message: "User not found" });
+    }
+    
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Server Error" });
+  }
+});
+
+// Store user data (uid, phone, address)
+// Updated POST endpoint - allow partial updates
+app.post('/users', async (req, res) => {
+  try {
+    const { uid, phone, address } = req.body;
+    
+    // Only uid is required, phone and address are optional
+    if (!uid) {
+      return res.status(400).json({ message: "uid is required" });
+    }
+
+    // Check if user already exists
+    const existingUser = await FoodHiveUsers.findOne({ uid });
+    
+    if (existingUser) {
+      // Update existing user - only update provided fields
+      const updateFields = { updatedAt: new Date() };
+      if (phone !== undefined) updateFields.phone = phone;
+      if (address !== undefined) updateFields.address = address;
+      
+      const result = await FoodHiveUsers.updateOne(
+        { uid },
+        { $set: updateFields }
+      );
+      res.json({ message: "User updated successfully", result });
+    } else {
+      // Create new user
+      const newUser = {
+        uid,
+        phone: phone || '',
+        address: address || '',
+        createdAt: new Date(),
+        updatedAt: new Date()
+      };
+      
+      const result = await FoodHiveUsers.insertOne(newUser);
+      res.json({ message: "User created successfully", result });
+    }
+    
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Server Error" });
+  }
+});
+
+    
     // Top 6 Foods by purchaseCount
     app.get('/top-six-food', async(req,res)=>{
       const result = await Foods.find().sort({ purchaseCount: -1 }).limit(6).toArray();
       res.send(result);
     })
-
-    // Api for pagination
-    app.get('/all-foods-by-pagination', async(req,res)=>{
-        const page = parseInt(req.query.page) || 1;
-        const limit = parseInt(req.query.limit) || 9;
-        const skip = parseInt(req.query.skip) || 0;
-        // console.log('page:',page,'limit:',limit,'skip:',skip)
-        const result = await Foods.find({}).sort({purchaseCount: -1}).skip(skip).limit(limit).toArray();
-        res.send(result)
-    })
-    
 
 		// Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
