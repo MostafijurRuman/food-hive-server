@@ -45,6 +45,16 @@ async function run() {
       const result = await Foods.find().sort({ purchaseCount: -1 }).limit(6).toArray();
       res.send(result);
     })
+
+    // Api for pagination
+    app.get('/all-foods-by-pagination', async(req,res)=>{
+        const page = parseInt(req.query.page) || 1;
+        const limit = parseInt(req.query.limit) || 9;
+        const skip = parseInt(req.query.skip) || 0;
+        // console.log('page:',page,'limit:',limit,'skip:',skip)
+        const result = await Foods.find({}).sort({purchaseCount: -1}).skip(skip).limit(limit).toArray();
+        res.send(result)
+    })
     
 
 		// Send a ping to confirm a successful connection
