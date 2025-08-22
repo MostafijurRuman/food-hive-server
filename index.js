@@ -196,6 +196,48 @@ async function run() {
       res.status(500).json({ message: "Server Error" });
       }
     });
+      // Update food by ID
+      app.put('/food/:id', async (req, res) => {
+        try {
+          const { id } = req.params;
+          if (!ObjectId.isValid(id)) {
+            return res.status(400).json({ message: "Invalid food ID" });
+          }
+          const updateFields = req.body;
+          updateFields.updatedAt = new Date();
+          const result = await Foods.updateOne(
+            { _id: new ObjectId(id) },
+            { $set: updateFields }
+          );
+          if (result.matchedCount === 0) {
+            return res.status(404).json({ message: "Food not found" });
+          }
+          res.json({ success: true, message: "Food updated successfully", result });
+        } catch (error) {
+          console.error('Error updating food:', error);
+          res.status(500).json({ message: "Server Error", error: error.message });
+        }
+      });
+
+      // Delete food by ID
+      app.delete('/food/:id', async (req, res) => {
+        try {
+          const { id } = req.params;
+          if (!ObjectId.isValid(id)) {
+            return res.status(400).json({ message: "Invalid food ID" });
+          }
+          const result = await Foods.deleteOne({ _id: new ObjectId(id) });
+          if (result.deletedCount === 0) {
+            return res.status(404).json({ message: "Food not found" });
+          }
+          res.json({ success: true, message: "Food deleted successfully", result });
+        } catch (error) {
+          console.error('Error deleting food:', error);
+          res.status(500).json({ message: "Server Error", error: error.message });
+        }
+      });
+
+      
 
     // Api for store user uid , phone , address
     const FoodHiveUsers = client.db("FoodHiveDB").collection("FoodHiveUsers"); //New collection for user info save
@@ -409,6 +451,120 @@ app.get("/my-foods/:uid", verifyToken, async (req, res) => {
   } catch (error) {
     console.error('Error fetching user foods:', error);
     res.status(500).json({ message: "Server Error" });
+  }
+});
+
+    // Update food quantity and purchase count after purchase
+app.put('/food/:id/purchase', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { quantity } = req.body; // quantity to purchase
+
+    if (!ObjectId.isValid(id)) {
+      return res.status(400).json({ message: "Invalid food ID" });
+    }
+    if (!quantity || quantity <= 0) {
+      return res.status(400).json({ message: "Quantity must be a positive number" });
+    }
+
+    // Find the food item
+    const food = await Foods.findOne({ _id: new ObjectId(id) });
+    if (!food) {
+      return res.status(404).json({ message: "Food not found" });
+    }
+    if (food.quantityAvailable < quantity) {
+      return res.status(400).json({ message: "Not enough quantity available" });
+    }
+
+    // Update quantityAvailable and purchaseCount
+    const result = await Foods.updateOne(
+      { _id: new ObjectId(id) },
+      {
+        $inc: { 
+          quantityAvailable: -quantity,
+          purchaseCount: quantity
+        },
+        $set: { updatedAt: new Date() }
+      }
+    );
+
+    if (result.matchedCount === 0) {
+      return res.status(404).json({ message: "Food not found" });
+    }
+
+    res.json({ success: true, message: "Food purchase updated", result });
+  } catch (error) {
+    console.error('Error updating food purchase:', error);
+    res.status(500).json({ message: "Server Error", error: error.message });
+  }
+});
+
+// Create Orders collection
+const Orders = client.db("FoodHiveDB").collection("Orders");
+
+// Create order API
+app.post("/orders", async (req, res) => {
+  try {
+    const {
+      foodId,
+      food,
+      buyer,
+      quantity,
+      totalPrice,
+      createdAt
+    } = req.body;
+
+    // Basic validation
+    if (!foodId || !food || !buyer || !quantity || !totalPrice || !createdAt) {
+      return res.status(400).json({ message: "Missing required order fields" });
+    }
+
+    // Build order object
+    const order = {
+      foodId: new ObjectId(foodId),
+      food,
+      buyer,
+      quantity: parseInt(quantity),
+      totalPrice: parseFloat(totalPrice),
+      createdAt: new Date(createdAt)
+    };
+
+    // Insert order
+    const result = await Orders.insertOne(order);
+
+    if (result.insertedId) {
+      res.status(201).json({
+        success: true,
+        message: "Order placed successfully",
+        orderId: result.insertedId
+      });
+    } else {
+      throw new Error("Failed to place order");
+    }
+  } catch (error) {
+    console.error("Error placing order:", error);
+    res.status(500).json({ message: "Server Error", error: error.message });
+  }
+});
+
+// Get orders by buyer email (secured)
+app.get("/orders", verifyToken, async (req, res) => {
+  try {
+    const email = req.query.email;
+    if (!email) {
+      return res.status(400).json({ message: "Email query parameter is required" });
+    }
+
+    // Only allow user to get their own orders
+    if (req.user.email !== email) {
+      return res.status(403).json({ message: "Access denied" });
+    }
+
+    const orders = await Orders.find({ "buyer.email": email }).sort({ createdAt: -1 }).toArray();
+    res.json({ success: true, count: orders.length, orders });
+  } catch (error) {
+    console.error("Error fetching orders:", error);
+    res.status(500).json({ message: "Server Error", error: error.message });
   }
 });
 
