@@ -175,6 +175,28 @@ async function run() {
       }
     });
 
+    // Api for food by id 
+    app.get("/food/:id", async (req, res) => {
+      try {
+      const { id } = req.params;
+      
+      if (!ObjectId.isValid(id)) {
+        return res.status(400).json({ message: "Invalid food ID" });
+      }
+
+      const food = await Foods.findOne({ _id: new ObjectId(id) });
+      
+      if (!food) {
+        return res.status(404).json({ message: "Food not found" });
+      }
+
+      res.json(food);
+      } catch (err) {
+      console.error(err);
+      res.status(500).json({ message: "Server Error" });
+      }
+    });
+
     // Api for store user uid , phone , address
     const FoodHiveUsers = client.db("FoodHiveDB").collection("FoodHiveUsers"); //New collection for user info save
 
@@ -252,6 +274,143 @@ async function run() {
         .toArray();
       res.send(result);
     });
+
+    // Add Food API - POST endpoint
+app.post("/foods", verifyToken, async (req, res) => {
+  try {
+    if (!Foods) {
+      return res.status(503).json({ message: "Database not connected yet." });
+    }
+
+    const {
+      name,
+      image,
+      category,
+      price,
+      quantity,
+      origin,
+      ingredients,
+      description,
+      madeBy,
+      addedBy
+    } = req.body;
+
+    // Validation
+    if (!name || !image || !category || !price || !quantity || !origin || !ingredients || !madeBy) {
+      return res.status(400).json({ 
+        message: "All required fields must be provided",
+        required: ["name", "image", "category", "price", "quantity", "origin", "ingredients", "madeBy"]
+      });
+    }
+
+    // Validate addedBy information
+    if (!addedBy || !addedBy.uid || !addedBy.email) {
+      return res.status(400).json({ 
+        message: "User authentication information is required" 
+      });
+    }
+
+    // Process ingredients - convert string to array if needed
+    let processedIngredients = ingredients;
+    if (typeof ingredients === 'string') {
+      processedIngredients = ingredients.split(',').map(item => item.trim()).filter(item => item);
+    }
+
+    // Create food document matching your MongoDB structure
+    const newFood = {
+      name: name.trim(),
+      image: image.trim(),
+      category: category.trim(),
+      price: parseFloat(price),
+      quantityAvailable: parseInt(quantity), // Note: mapping from 'quantity' to 'quantityAvailable'
+      originCountry: origin.trim(), // Note: mapping from 'origin' to 'originCountry'
+      description: description ? description.trim() : "",
+      ingredients: processedIngredients,
+      madeBy: madeBy.trim(), // This can be added as a separate field if needed in your schema
+      addedBy: {
+        userId: addedBy.uid, // Note: mapping from 'uid' to 'userId'
+        name: addedBy.name || "Anonymous",
+        email: addedBy.email,
+        photoURL: addedBy.photoURL || ""
+      },
+      purchaseCount: 0,
+      isActive: true,
+      createdAt: new Date(),
+      updatedAt: new Date()
+    };
+
+    // Validate price and quantity
+    if (newFood.price <= 0) {
+      return res.status(400).json({ message: "Price must be greater than 0" });
+    }
+
+    if (newFood.quantityAvailable <= 0) {
+      return res.status(400).json({ message: "Quantity must be greater than 0" });
+    }
+
+    // Insert the food item
+    const result = await Foods.insertOne(newFood);
+
+    if (result.insertedId) {
+      // Return the created food with its ID
+      const createdFood = await Foods.findOne({ _id: result.insertedId });
+      
+      res.status(201).json({
+        success: true,
+        message: "Food item added successfully",
+        data: createdFood,
+        foodId: result.insertedId
+      });
+    } else {
+      throw new Error("Failed to insert food item");
+    }
+
+  } catch (error) {
+    console.error('Error adding food:', error);
+    
+    // Handle duplicate key errors
+    if (error.code === 11000) {
+      return res.status(409).json({ 
+        message: "A food item with similar details already exists" 
+      });
+    }
+
+    res.status(500).json({ 
+      message: "Server Error", 
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+
+// Get foods by user (My Foods) - for the creator to see their added foods
+app.get("/my-foods/:uid", verifyToken, async (req, res) => {
+  try {
+    if (!Foods) {
+      return res.status(503).json({ message: "Database not connected yet." });
+    }
+
+    const { uid } = req.params;
+
+    // Verify the user is requesting their own foods
+    if (req.user.uid && req.user.uid !== uid) {
+      return res.status(403).json({ message: "Access denied" });
+    }
+
+    const userFoods = await Foods.find({ 
+      "addedBy.userId": uid 
+    }).sort({ createdAt: -1 }).toArray();
+
+    res.json({
+      success: true,
+      count: userFoods.length,
+      foods: userFoods
+    });
+
+  } catch (error) {
+    console.error('Error fetching user foods:', error);
+    res.status(500).json({ message: "Server Error" });
+  }
+});
 
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
