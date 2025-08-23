@@ -105,3 +105,4 @@ logs
 # Build directories
 dist/
 build/
+.vercel

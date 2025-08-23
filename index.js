@@ -12,7 +12,7 @@ const cookieParser = require("cookie-parser");
 
 // 2. Middlewares
 app.use(cors({
-  origin: ['http://localhost:5175','http://localhost:5173','http://localhost:5174','http://localhost:5000'],
+  origin: ['http://localhost:5173','https://foodhivee.firebaseapp.com','https://foodhivee.web.app'],
   credentials: true,
 }));
 app.use(cookieParser());
@@ -61,7 +61,7 @@ async function run() {
         .cookie("refreshToken", refreshToken, {
           httpOnly: true,
           secure: isProd,
-          sameSite: "strict",
+          sameSite: isProd ? "none" : "strict",
         })
         .send({ success: true });
     });
@@ -130,7 +130,7 @@ async function run() {
       req.user = decoded;
       next();
     });
-  };
+   };
 
 
     // All CRUD operations here...
@@ -318,7 +318,7 @@ async function run() {
     });
 
     // Add Food API - POST endpoint
-app.post("/foods", verifyToken, async (req, res) => {
+ app.post("/foods", verifyToken, async (req, res) => {
   try {
     if (!Foods) {
       return res.status(503).json({ message: "Database not connected yet." });
@@ -422,10 +422,10 @@ app.post("/foods", verifyToken, async (req, res) => {
       error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
-});
+ });
 
-// Get foods by user (My Foods) - for the creator to see their added foods
-app.get("/my-foods/:uid", verifyToken, async (req, res) => {
+ // Get foods by user (My Foods) - for the creator to see their added foods
+ app.get("/my-foods/:uid", verifyToken, async (req, res) => {
   try {
     if (!Foods) {
       return res.status(503).json({ message: "Database not connected yet." });
@@ -452,10 +452,10 @@ app.get("/my-foods/:uid", verifyToken, async (req, res) => {
     console.error('Error fetching user foods:', error);
     res.status(500).json({ message: "Server Error" });
   }
-});
+ });
 
     // Update food quantity and purchase count after purchase
-app.put('/food/:id/purchase', async (req, res) => {
+ app.put('/food/:id/purchase', async (req, res) => {
   try {
     const { id } = req.params;
     const { quantity } = req.body; // quantity to purchase
@@ -497,13 +497,13 @@ app.put('/food/:id/purchase', async (req, res) => {
     console.error('Error updating food purchase:', error);
     res.status(500).json({ message: "Server Error", error: error.message });
   }
-});
+ });
 
-// Create Orders collection
-const Orders = client.db("FoodHiveDB").collection("Orders");
+ // Create Orders collection
+ const Orders = client.db("FoodHiveDB").collection("Orders");
 
-// Create order API
-app.post("/orders", async (req, res) => {
+ // Create order API
+ app.post("/orders", async (req, res) => {
   try {
     const {
       foodId,
@@ -545,10 +545,10 @@ app.post("/orders", async (req, res) => {
     console.error("Error placing order:", error);
     res.status(500).json({ message: "Server Error", error: error.message });
   }
-});
+ });
 
-// Get orders by buyer email (secured)
-app.get("/orders", verifyToken, async (req, res) => {
+ // Get orders by buyer email (secured)
+ app.get("/orders", verifyToken, async (req, res) => {
   try {
     const email = req.query.email;
     if (!email) {
@@ -566,25 +566,29 @@ app.get("/orders", verifyToken, async (req, res) => {
     console.error("Error fetching orders:", error);
     res.status(500).json({ message: "Server Error", error: error.message });
   }
-});
+ });
 
     // Send a ping to confirm a successful connection
-    await client.db("admin").command({ ping: 1 });
-    console.log(
-      "Pinged your deployment. You successfully connected to MongoDB!"
-    );
+    // await client.db("admin").command({ ping: 1 });
+    // console.log(
+    //   "Pinged your deployment. You successfully connected to MongoDB!"
+    // );
   } finally {
     // await client.close(); // keep it open if you're hosting continuously
   }
+  }
+  run().catch(console.dir);
+
+  // 5. Basic route
+  app.get("/", (req, res) => {
+    res.send("Food Hive Server is Running...");
+  });
+
+  if (process.env.NODE_ENV !== "production") {
+  app.listen(port, () => {
+    console.log(`Food Hive Server is running locally on port ${port}`);
+  });
 }
-run().catch(console.dir);
 
-// 5. Basic route
-app.get("/", (req, res) => {
-  res.send("Food Hive Server is Running...");
-});
+module.exports = app;
 
-// 6. Listen to port
-app.listen(port, () => {
-  console.log(`Food Hive Server is running on port ${port}`);
-});
